@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { getRateLimiterStatus } from "@/lib/security/rate-limit";
 import { metricsCollector } from "@/lib/observability/metrics";
+import "@/lib/shutdown";
 
 export const dynamic = "force-dynamic";
 
