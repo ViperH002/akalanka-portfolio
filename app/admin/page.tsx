@@ -72,6 +72,16 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     checkSession();
+
+    // Defense against browser back-forward cache (bfcache) restoring authenticated view after logout
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        checkSession();
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
   }, [checkSession]);
 
   const handleLogin = async (e: React.FormEvent) => {

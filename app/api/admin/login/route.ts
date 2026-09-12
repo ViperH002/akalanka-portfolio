@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { getClientIp } from "@/lib/security/rate-limit";
 import { authService } from "@/services/auth.service";
+import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    // 0. Validate Request Origin (CSRF defense)
+    if (!validateOrigin(req)) {
+      return csrfErrorResponse();
+    }
+
     const ip = getClientIp(req);
 
     // 1. Parse request body safely

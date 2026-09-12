@@ -4,6 +4,7 @@ import {
   verifyAdminPassword,
   createAdminSessionToken,
   verifyAdminSessionToken,
+  revokeSessionToken,
   getAdminSessionCookieOptions,
   getAdminSessionClearCookieOptions,
 } from "@/lib/security/auth";
@@ -108,13 +109,22 @@ export class AuthService {
   }
 
   /**
-   * Generates clearance removal cookie header
+   * Invalidates session token server-side, logs security event, and generates removal cookie
    */
-  processLogout(): { cookieHeader: string } {
+  async processLogout(token?: string | null, ip: string = "127.0.0.1"): Promise<{ cookieHeader: string }> {
+    if (token) {
+      revokeSessionToken(token);
+    }
+
+    await auditStore.recordEvent({
+      action: "logout",
+      ip,
+    });
+
     const isProduction = process.env.NODE_ENV === "production";
     const cookieHeader = getAdminSessionClearCookieOptions(isProduction);
 
-    logger.info("Admin clearance revoked", { subsystem: "auth" });
+    logger.info("Admin clearance revoked and session invalidated", { subsystem: "auth" });
     return { cookieHeader };
   }
 

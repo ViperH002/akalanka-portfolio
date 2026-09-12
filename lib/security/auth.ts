@@ -40,17 +40,62 @@ export function verifyAdminPassword(candidate: string): boolean {
 }
 
 interface AdminSessionPayload {
+  jti: string;
   role: "admin";
   iat: number;
   exp: number;
 }
 
+// Memory-bounded map of revoked session identifiers with expiry timestamp
+const revokedSessions = new Map<string, number>();
+
 /**
- * Generates an HMAC-SHA256 signed tamper-proof session token
+ * Sweeps expired session IDs from revocation map to prevent unbounded growth
+ */
+function cleanupRevokedSessions(): void {
+  const now = Date.now();
+  revokedSessions.forEach((exp, jti) => {
+    if (now > exp) {
+      revokedSessions.delete(jti);
+    }
+  });
+}
+
+/**
+ * Permanently invalidates a session token server-side upon logout
+ */
+export function revokeSessionToken(token: string | undefined | null): void {
+  if (!token || typeof token !== "string") return;
+
+  const parts = token.split(".");
+  if (parts.length !== 2) return;
+
+  try {
+    const payloadJson = Buffer.from(parts[0], "base64url").toString("utf8");
+    const payload: Partial<AdminSessionPayload> = JSON.parse(payloadJson);
+    if (payload.jti && payload.exp) {
+      revokedSessions.set(payload.jti, payload.exp);
+      cleanupRevokedSessions();
+    }
+  } catch {
+    // Ignore malformed token
+  }
+}
+
+/**
+ * Checks if a session identifier has been explicitly revoked
+ */
+export function isSessionRevoked(jti: string): boolean {
+  return revokedSessions.has(jti);
+}
+
+/**
+ * Generates an HMAC-SHA256 signed tamper-proof session token with unique cryptographic ID
  */
 export function createAdminSessionToken(): string {
   const now = Date.now();
   const payload: AdminSessionPayload = {
+    jti: crypto.randomUUID(),
     role: "admin",
     iat: now,
     exp: now + SESSION_DURATION_SECONDS * 1000,
@@ -67,7 +112,7 @@ export function createAdminSessionToken(): string {
 }
 
 /**
- * Verifies HMAC-SHA256 signature and expiration of session token
+ * Verifies HMAC-SHA256 signature, expiration, and non-revocation status of session token
  */
 export function verifyAdminSessionToken(token: string | undefined | null): boolean {
   if (!token || typeof token !== "string") {
@@ -109,6 +154,11 @@ export function verifyAdminSessionToken(token: string | undefined | null): boole
 
     if (Date.now() > payload.exp) {
       return false; // Expired session
+    }
+
+    // Reject explicitly revoked session tokens
+    if (payload.jti && isSessionRevoked(payload.jti)) {
+      return false;
     }
 
     return true;

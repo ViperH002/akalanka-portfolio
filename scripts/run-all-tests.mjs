@@ -106,6 +106,36 @@ async function runMasterSuite() {
     });
     const authSessionJson = await authSessionRes.json();
     assert(authSessionJson.authenticated === true, "Session validated with issued cryptographic token");
+
+    // 5d. Anti-cache headers on sensitive administrative endpoints
+    const cacheHeader = authSessionRes.headers.get("cache-control") || "";
+    assert(cacheHeader.includes("no-store") && cacheHeader.includes("no-cache"), "Admin session enforces strict anti-cache headers");
+
+    // 5e. CSRF Origin validation defense
+    const csrfRes = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://unauthorized-cross-origin-attacker.com",
+      },
+      body: JSON.stringify({ passcode: "admin2026" }),
+    });
+    assert(csrfRes.status === 403, "CSRF origin mismatch rejected with 403 Forbidden");
+
+    // 5f. Explicit logout and server-side session revocation
+    const logoutRes = await fetch(`${BASE_URL}/api/admin/logout`, {
+      method: "POST",
+      headers: { Cookie: token },
+    });
+    assert(logoutRes.status === 200, "Logout processed and session revocation initiated");
+
+    // 5g. Verification that revoked token CANNOT be replayed (Defense against token replay)
+    const replayRes = await fetch(`${BASE_URL}/api/admin/session`, {
+      headers: { Cookie: token },
+      cache: "no-store",
+    });
+    const replayJson = await replayRes.json();
+    assert(replayJson.authenticated === false, "Revoked session token permanently rejected on server");
   } catch (err) {
     assert(false, `Auth check failed: ${err.message}`);
   }
