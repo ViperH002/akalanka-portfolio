@@ -10,7 +10,14 @@ export interface AuditEvent {
     | "login_failed"
     | "lockout_triggered"
     | "logout"
-    | "rate_limit_exceeded";
+    | "rate_limit_exceeded"
+    | "admin_login_success"
+    | "admin_login_failed"
+    | "admin_lockout_triggered"
+    | "admin_mfa_success"
+    | "admin_mfa_failed"
+    | "admin_logout"
+    | string;
   ip: string;
   details?: Record<string, unknown>;
 }

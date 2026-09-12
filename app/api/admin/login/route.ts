@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getClientIp } from "@/lib/security/rate-limit";
 import { authService } from "@/services/auth.service";
 import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
+
+const loginSchema = z.object({
+  passcode: z.string().min(1, "Clearance passkey is required.").max(256),
+  mfaCode: z.string().regex(/^\d{6}$/, "MFA code must be 6 digits").optional().or(z.literal("")),
+});
 
 export async function POST(req: Request) {
   try {
@@ -15,10 +21,10 @@ export async function POST(req: Request) {
 
     const ip = getClientIp(req);
 
-    // 1. Parse request body safely
-    let body: { passcode?: string };
+    // 1. Parse and validate request body schema
+    let rawBody: unknown;
     try {
-      body = await req.json();
+      rawBody = await req.json();
     } catch {
       return NextResponse.json(
         { error: "Invalid request payload format." },
@@ -26,19 +32,35 @@ export async function POST(req: Request) {
       );
     }
 
-    const { passcode } = body;
-
-    if (!passcode || typeof passcode !== "string") {
+    const parsed = loginSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const firstIssue = parsed.error.issues?.[0]?.message || "Invalid credentials format.";
       return NextResponse.json(
-        { error: "Clearance passkey is required." },
+        { error: firstIssue },
         { status: 400, headers: { "Cache-Control": "no-store, private" } }
       );
     }
 
+    const { passcode, mfaCode } = parsed.data;
+
     // 2. Delegate authentication check to AuthService
-    const result = await authService.processLogin(ip, passcode);
+    const result = await authService.processLogin(ip, passcode, mfaCode || undefined);
 
     if (!result.success) {
+      // Step-Up Multi-Factor Challenge
+      if (result.requiresMfa && !result.error?.includes("Invalid or expired")) {
+        return NextResponse.json(
+          {
+            requiresMfa: true,
+            message: "MFA_REQUIRED: Please enter your 6-digit authenticator code.",
+          },
+          {
+            status: 200,
+            headers: { "Cache-Control": "no-store, private" },
+          }
+        );
+      }
+
       if (result.isLocked) {
         return NextResponse.json(
           {
@@ -60,6 +82,7 @@ export async function POST(req: Request) {
         {
           error: result.error,
           remainingAttempts: result.remainingAttempts,
+          requiresMfa: result.requiresMfa,
         },
         {
           status: 401,

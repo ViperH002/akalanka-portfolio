@@ -1,20 +1,41 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { authService } from "@/services/auth.service";
+import { NextRequest, NextResponse } from "next/server";
+import { extractSessionContext, hasPermission, Role } from "@/lib/security/rbac";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(authService.getCookieName());
-    const token = sessionCookie?.value;
+    const session = extractSessionContext(request);
 
-    const isAuthenticated = authService.verifySession(token);
+    if (!session.authenticated) {
+      return NextResponse.json(
+        {
+          authenticated: false,
+          role: "user",
+          permissions: [],
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, private",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        }
+      );
+    }
+
+    const mfaConfigured = Boolean(process.env.ADMIN_MFA_SECRET && process.env.ADMIN_MFA_SECRET.trim().length > 0);
 
     return NextResponse.json(
-      { authenticated: isAuthenticated },
+      {
+        authenticated: true,
+        userId: session.userId,
+        role: session.role,
+        permissions: session.role === "admin" ? ["ALL"] : [],
+        mfaEnabled: mfaConfigured,
+      },
       {
         status: 200,
         headers: {
@@ -25,12 +46,12 @@ export async function GET() {
       }
     );
   } catch (error) {
-    logger.error("Error checking session status in /api/admin/session", {
+    logger.error("Error evaluating session context in /api/admin/session", {
       subsystem: "auth",
       error,
     });
     return NextResponse.json(
-      { authenticated: false },
+      { authenticated: false, role: "user", permissions: [] },
       {
         status: 200,
         headers: {

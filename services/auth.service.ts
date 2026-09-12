@@ -13,10 +13,12 @@ import {
   recordLoginFailure,
   clearLoginFailures,
 } from "@/lib/security/rate-limit";
+import { verifyTOTPToken } from "@/lib/security/mfa";
 import { auditStore } from "@/lib/storage/audit-store";
 
 export interface LoginAttemptResult {
   success: boolean;
+  requiresMfa?: boolean;
   isLocked?: boolean;
   remainingSeconds?: number;
   remainingAttempts?: number;
@@ -26,15 +28,15 @@ export interface LoginAttemptResult {
 
 export class AuthService {
   /**
-   * Validates admin passkey with constant-time verification, tracks lockout state,
-   * and issues an HMAC-SHA256 authenticated cookie header on success.
+   * Validates admin passkey with constant-time verification, evaluates MFA status,
+   * tracks lockout state, and issues an HMAC-SHA256 authenticated cookie header on success.
    */
-  async processLogin(ip: string, passcode: string): Promise<LoginAttemptResult> {
+  async processLogin(ip: string, passcode: string, mfaCode?: string): Promise<LoginAttemptResult> {
     // 1. Check brute-force lockout status
     const lockout = checkLoginLockout(ip);
     if (lockout.isLocked) {
       await auditStore.recordEvent({
-        action: "lockout_triggered",
+        action: "admin_lockout_triggered",
         ip,
         details: { remainingSeconds: lockout.remainingLockoutSeconds },
       });
@@ -50,13 +52,13 @@ export class AuthService {
       };
     }
 
-    // 2. Verify passkey using constant-time comparison
-    const isValid = verifyAdminPassword(passcode.trim());
+    // 2. Verify primary passkey / password using constant-time comparison
+    const isValidPassword = verifyAdminPassword(passcode.trim());
 
-    if (!isValid) {
+    if (!isValidPassword) {
       const failureResult = recordLoginFailure(ip);
       await auditStore.recordEvent({
-        action: failureResult.isLocked ? "lockout_triggered" : "login_failed",
+        action: failureResult.isLocked ? "admin_lockout_triggered" : "admin_login_failed",
         ip,
         details: { remainingAttempts: failureResult.remainingAttempts },
       });
@@ -83,17 +85,57 @@ export class AuthService {
       };
     }
 
-    // 3. Clear failure counter on success
+    // 3. Evaluate Multi-Factor Authentication (MFA / TOTP)
+    const mfaSecret = process.env.ADMIN_MFA_SECRET;
+    if (mfaSecret && mfaSecret.trim().length > 0) {
+      if (!mfaCode || mfaCode.trim().length === 0) {
+        return {
+          success: false,
+          requiresMfa: true,
+          error: "MFA_REQUIRED: Please provide your 6-digit authenticator code.",
+        };
+      }
+
+      const isMfaValid = verifyTOTPToken(mfaSecret, mfaCode.trim());
+      if (!isMfaValid) {
+        const failureResult = recordLoginFailure(ip);
+        await auditStore.recordEvent({
+          action: "admin_mfa_failed",
+          ip,
+          details: { remainingAttempts: failureResult.remainingAttempts },
+        });
+        logger.warn("Invalid MFA code provided during admin authentication", {
+          subsystem: "auth",
+          data: { ip },
+        });
+
+        return {
+          success: false,
+          requiresMfa: true,
+          isLocked: failureResult.isLocked,
+          remainingSeconds: failureResult.remainingLockoutSeconds,
+          remainingAttempts: failureResult.remainingAttempts,
+          error: "ACCESS DENIED: Invalid or expired 6-digit MFA Code.",
+        };
+      }
+
+      await auditStore.recordEvent({
+        action: "admin_mfa_success",
+        ip,
+      });
+    }
+
+    // 4. Clear failure counter on success
     clearLoginFailures(ip);
 
-    // 4. Record successful audit event
+    // 5. Record successful audit event
     await auditStore.recordEvent({
-      action: "login_success",
+      action: "admin_login_success",
       ip,
     });
 
-    // 5. Issue tamper-proof HMAC-SHA256 session token
-    const token = createAdminSessionToken();
+    // 6. Issue tamper-proof HMAC-SHA256 session token
+    const token = createAdminSessionToken({ role: "admin", userId: "admin_primary" });
     const isProduction = process.env.NODE_ENV === "production";
     const cookieHeader = getAdminSessionCookieOptions(token, isProduction);
 
@@ -117,7 +159,7 @@ export class AuthService {
     }
 
     await auditStore.recordEvent({
-      action: "logout",
+      action: "admin_logout",
       ip,
     });
 

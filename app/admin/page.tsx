@@ -37,6 +37,8 @@ export default function AdminDashboardPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [passcode, setPasscode] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [requiresMfa, setRequiresMfa] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("analytics");
@@ -97,7 +99,10 @@ export default function AdminDashboardPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ passcode: passcode.trim() }),
+        body: JSON.stringify({
+          passcode: passcode.trim(),
+          mfaCode: requiresMfa ? mfaCode.trim() : undefined,
+        }),
       });
 
       const data = await res.json();
@@ -105,7 +110,12 @@ export default function AdminDashboardPage() {
       if (res.ok && data.success) {
         setIsAuthenticated(true);
         setPasscode("");
+        setMfaCode("");
+        setRequiresMfa(false);
         setErrorMsg("");
+      } else if (data.requiresMfa) {
+        setRequiresMfa(true);
+        setErrorMsg(data.error && data.error.includes("Invalid") ? data.error : "");
       } else {
         setErrorMsg(data.error || "ACCESS DENIED: Authentication failed.");
       }
@@ -165,22 +175,49 @@ export default function AdminDashboardPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-mono text-neutral-300 flex items-center justify-between">
-                <span>SECURITY PASSKEY</span>
-                <span className="text-[10px] text-neutral-500 font-mono">ENCRYPTED CLEARANCE</span>
-              </label>
-              <input
-                type="password"
-                required
-                autoFocus
-                disabled={isSubmitting}
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-                placeholder="••••••••••••"
-                className="w-full px-4 py-3 rounded-xl bg-black/60 border border-white/15 text-white font-mono text-sm tracking-widest focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50"
-              />
-            </div>
+            {!requiresMfa ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono text-neutral-300 flex items-center justify-between">
+                  <span>SECURITY PASSKEY</span>
+                  <span className="text-[10px] text-neutral-500 font-mono">ENCRYPTED CLEARANCE</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  disabled={isSubmitting}
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full px-4 py-3 rounded-xl bg-black/60 border border-white/15 text-white font-mono text-sm tracking-widest focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 disabled:opacity-50"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center gap-2 text-red-400 text-xs font-mono">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  <span>STEP 2: 2FA MULTI-FACTOR VERIFICATION</span>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-mono text-neutral-300 flex items-center justify-between">
+                    <span>AUTHENTICATOR CODE (TOTP)</span>
+                    <span className="text-[10px] text-red-400 font-mono">6-DIGIT TOKEN</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    maxLength={6}
+                    pattern="[0-9]{6}"
+                    disabled={isSubmitting}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className="w-full px-4 py-3 rounded-xl bg-black/60 border border-red-500/60 text-white font-mono text-center text-lg tracking-[0.5em] focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 disabled:opacity-50"
+                  />
+                </div>
+              </div>
+            )}
 
             {errorMsg && (
               <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono">
@@ -193,8 +230,26 @@ export default function AdminDashboardPage() {
               disabled={isSubmitting}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-mono text-xs font-bold tracking-widest uppercase shadow-lg shadow-red-600/30 transition-all cursor-pointer disabled:opacity-50"
             >
-              {isSubmitting ? "VERIFYING CREDENTIALS..." : "AUTHENTICATE ACCESS →"}
+              {isSubmitting
+                ? "VERIFYING CREDENTIALS..."
+                : requiresMfa
+                ? "VERIFY 2FA CODE →"
+                : "AUTHENTICATE ACCESS →"}
             </button>
+
+            {requiresMfa && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRequiresMfa(false);
+                  setMfaCode("");
+                  setErrorMsg("");
+                }}
+                className="w-full py-2 text-xs font-mono text-neutral-400 hover:text-white transition-colors"
+              >
+                ← Cancel and Re-enter Passkey
+              </button>
+            )}
           </form>
 
           <div className="pt-4 border-t border-white/10 text-center">

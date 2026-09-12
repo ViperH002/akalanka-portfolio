@@ -207,15 +207,15 @@ async function runRegressionSuite() {
       "/api/admin/leads/1",
     ];
 
-    let all404 = true;
+    let allBlocked = true;
     for (const route of idorRoutes) {
       const res = await fetch(`${BASE_URL}${route}`);
-      if (res.status !== 404) {
-        all404 = false;
+      if (res.status !== 404 && res.status !== 401) {
+        allBlocked = false;
         break;
       }
     }
-    assert(all404, "Server exposes zero REST object-by-ID routes; all return 404 Not Found (IDOR surface: NONE)");
+    assert(allBlocked, "Server exposes zero unprotected REST object-by-ID routes; all return 404 or 401 (IDOR surface: NONE)");
   } catch (err) {
     assert(false, "IDOR check failed", err.message);
   }

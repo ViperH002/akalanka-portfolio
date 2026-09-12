@@ -26,26 +26,49 @@ function getAdminSecretKey(): string {
 }
 
 /**
- * Constant-time comparison to prevent timing attacks
+ * Cryptographic PBKDF2-HMAC-SHA512 password hashing with random 16-byte salt (100,000 rounds)
+ */
+export function hashPassword(password: string, customSalt?: string): { hash: string; salt: string } {
+  const salt = customSalt || crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.pbkdf2Sync(password, salt, 100000, 64, "sha512");
+  return {
+    hash: derivedKey.toString("hex"),
+    salt,
+  };
+}
+
+/**
+ * Constant-time comparison to prevent timing attacks.
+ * Supports both salted PBKDF2 hashes and SHA-256 digested passkeys.
  */
 export function verifyAdminPassword(candidate: string): boolean {
   if (typeof candidate !== "string" || candidate.length === 0) {
     return false;
   }
 
-  const expectedKey = getAdminSecretKey();
+  // 1. If PBKDF2 salted hash is configured in environment
+  const configuredHash = process.env.ADMIN_PASSWORD_HASH;
+  const configuredSalt = process.env.ADMIN_PASSWORD_SALT;
+  if (configuredHash && configuredSalt) {
+    const candidateDerived = crypto.pbkdf2Sync(candidate, configuredSalt, 100000, 64, "sha512");
+    const expectedBuf = Buffer.from(configuredHash, "hex");
+    if (candidateDerived.length === expectedBuf.length && crypto.timingSafeEqual(candidateDerived, expectedBuf)) {
+      return true;
+    }
+  }
 
-  // Hash both candidate and expected passkey with SHA-256 before timingSafeEqual
-  // This guarantees identical byte length and eliminates timing leakage from string length variations
+  // 2. Constant-time SHA-256 comparison against ADMIN_SECRET_KEY
+  const expectedKey = getAdminSecretKey();
   const candidateHash = crypto.createHash("sha256").update(candidate).digest();
   const expectedHash = crypto.createHash("sha256").update(expectedKey).digest();
 
   return crypto.timingSafeEqual(candidateHash, expectedHash);
 }
 
-interface AdminSessionPayload {
+export interface AdminSessionPayload {
   jti: string;
-  role: "admin";
+  userId?: string;
+  role: "admin" | "editor" | "user";
   iat: number;
   exp: number;
 }
@@ -164,11 +187,12 @@ export function isSessionRevoked(jti: string): boolean {
 /**
  * Generates an HMAC-SHA256 signed tamper-proof session token with unique cryptographic ID
  */
-export function createAdminSessionToken(): string {
+export function createAdminSessionToken(options?: { role?: "admin" | "editor" | "user"; userId?: string }): string {
   const now = Date.now();
   const payload: AdminSessionPayload = {
     jti: crypto.randomUUID(),
-    role: "admin",
+    userId: options?.userId || "admin_primary",
+    role: options?.role || "admin",
     iat: now,
     exp: now + SESSION_DURATION_SECONDS * 1000,
   };
@@ -220,7 +244,7 @@ export function verifyAdminSessionToken(token: string | undefined | null): boole
     const payloadJson = Buffer.from(payloadBase64, "base64url").toString("utf8");
     const payload: AdminSessionPayload = JSON.parse(payloadJson);
 
-    if (payload.role !== "admin") {
+    if (payload.role !== "admin" && payload.role !== "editor") {
       return false;
     }
 
