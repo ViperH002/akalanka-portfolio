@@ -67,7 +67,7 @@ export async function generateSpeechAudio(textToSpeak: string): Promise<Buffer |
     return null;
   }
 
-  const voiceId = DEFAULT_VOICE_CONFIG.voiceId;
+  const voiceId = encodeURIComponent(DEFAULT_VOICE_CONFIG.voiceId.trim());
   const cacheKey = `${voiceId}_${cleanText}`;
 
   if (audioCache.has(cacheKey)) {

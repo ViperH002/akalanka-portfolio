@@ -56,7 +56,8 @@ export class TelemetryService {
    */
   async getGitHubTelemetry(): Promise<GitHubTelemetryResult> {
     const token = process.env.GITHUB_TOKEN;
-    const username = process.env.GITHUB_USERNAME || "ViperH002";
+    const rawUsername = process.env.GITHUB_USERNAME || "ViperH002";
+    const safeUsername = encodeURIComponent(rawUsername.trim());
 
     const headers: Record<string, string> = {
       "User-Agent": "Akalanka-Portfolio-Sync",
@@ -69,11 +70,11 @@ export class TelemetryService {
 
     logger.debug("Syncing GitHub telemetry", {
       subsystem: "telemetry",
-      data: { username },
+      data: { username: safeUsername },
     });
 
     // 1. Fetch GitHub User Profile
-    const userRes = await fetch(`https://api.github.com/users/${username}`, {
+    const userRes = await fetch(`https://api.github.com/users/${safeUsername}`, {
       headers,
       next: { revalidate: 600 },
     });
@@ -90,7 +91,7 @@ export class TelemetryService {
 
     // 2. Fetch Recent Public Repositories
     const reposRes = await fetch(
-      `https://api.github.com/users/${username}/repos?sort=pushed&per_page=8`,
+      `https://api.github.com/users/${safeUsername}/repos?sort=pushed&per_page=8`,
       {
         headers,
         next: { revalidate: 600 },

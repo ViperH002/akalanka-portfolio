@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { contactService } from "@/services/contact.service";
 import { logger } from "@/lib/logger";
 
@@ -31,6 +32,11 @@ const contactSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    // 0. Validate Request Origin (CSRF defense)
+    if (!validateOrigin(req)) {
+      return csrfErrorResponse();
+    }
+
     const ip = getClientIp(req);
 
     // 1. IP Rate Limiting: Max 5 transmissions per hour per IP

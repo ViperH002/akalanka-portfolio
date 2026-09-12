@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatRequestSchema } from "@/lib/validation/chat";
 import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { aiService } from "@/services/ai.service";
 import { logger } from "@/lib/logger";
 import { ChatApiResponse } from "@/types/ai";
@@ -9,6 +10,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Validate Request Origin (CSRF defense)
+    if (!validateOrigin(req)) {
+      return csrfErrorResponse();
+    }
+
     // 1. Enforce IP-based rate limiting
     const clientIp = getClientIp(req);
     const maxChatPerMinute = parseInt(process.env.RATE_LIMIT_CHAT_PER_MINUTE || "25", 10);
