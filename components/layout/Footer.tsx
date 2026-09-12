@@ -47,14 +47,6 @@ export function Footer() {
                   </a>
                 </li>
               ))}
-              <li>
-                <Link
-                  href="/admin"
-                  className="text-red-400/90 hover:text-red-400 hover:translate-x-1 inline-block transition-all duration-200 font-bold"
-                >
-                  ⚡ Admin Control Center
-                </Link>
-              </li>
             </ul>
           </div>
 

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Shield, Sparkles } from "lucide-react";
 
@@ -20,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function Navbar() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<string>("hero");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [hasScrolled, setHasScrolled] = useState(false);
@@ -44,11 +46,22 @@ export function Navbar() {
       }
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        e.preventDefault();
+        router.push("/admin");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
 
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [router]);
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, id: string) => {
     e.preventDefault();
@@ -200,27 +213,18 @@ export function Navbar() {
               ))}
             </div>
 
-            {/* Admin Command Link & Action */}
-            <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-              <Link
-                href="/admin"
-                onClick={() => setDrawerOpen(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-xs font-mono text-white/80 hover:text-white transition-colors"
-              >
-                <Shield className="w-3.5 h-3.5 text-red-400" />
-                <span>ADMIN PANEL</span>
-              </Link>
-
+            {/* Quick Actions */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setDrawerOpen(false);
                   handleDownloadCV();
                 }}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-neutral-200 transition-colors shadow-sm"
               >
-                <Download className="w-3 h-3" />
-                <span>CV / RESUME</span>
+                <Download className="w-3.5 h-3.5" />
+                <span>DOWNLOAD CV / RESUME</span>
               </button>
             </div>
           </motion.div>
