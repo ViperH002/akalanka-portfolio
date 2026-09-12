@@ -1,4 +1,5 @@
 import { z } from "zod";
+import crypto from "crypto";
 import { logger } from "@/lib/logger";
 
 const envSchema = z.object({
@@ -100,6 +101,9 @@ export function getValidatedEnv(): ValidatedEnv {
   return cachedEnv;
 }
 
+let ephemeralProductionSecret: string | null = null;
+let ephemeralProductionPasskey: string | null = null;
+
 /**
  * Retrieves the cryptographic session signing secret with safe entropy guarantees
  */
@@ -111,6 +115,18 @@ export function getCryptographicSessionSecret(): string {
     return secret;
   }
 
+  // In production, never use hardcoded static default; generate ephemeral CSPRNG secret
+  if (process.env.NODE_ENV === "production") {
+    if (!ephemeralProductionSecret) {
+      ephemeralProductionSecret = crypto.randomBytes(32).toString("hex");
+      logger.error(
+        "CRITICAL: SESSION_SECRET unset in production! Generated ephemeral 256-bit runtime secret. Active sessions will be invalidated upon container restart.",
+        { subsystem: "security" }
+      );
+    }
+    return ephemeralProductionSecret!;
+  }
+
   // Fallback for local development
   return "devcraft-system-hardening-secret-key-2026-production-entropy";
 }
@@ -120,5 +136,19 @@ export function getCryptographicSessionSecret(): string {
  */
 export function getAdministrativePasskey(): string {
   const env = getValidatedEnv();
+
+  if (process.env.NODE_ENV === "production") {
+    if (!env.ADMIN_SECRET_KEY || env.ADMIN_SECRET_KEY === "admin2026") {
+      if (!ephemeralProductionPasskey) {
+        ephemeralProductionPasskey = crypto.randomBytes(16).toString("hex");
+        logger.error(
+          `CRITICAL: ADMIN_SECRET_KEY unset or using default 'admin2026' in production! Default disabled. Ephemeral clearance key generated: [${ephemeralProductionPasskey}]. Configure ADMIN_SECRET_KEY in production.`,
+          { subsystem: "security" }
+        );
+      }
+      return ephemeralProductionPasskey!;
+    }
+  }
+
   return env.ADMIN_SECRET_KEY || "admin2026";
 }

@@ -31,6 +31,8 @@ function isPromptInjectionAttempt(query: string): boolean {
     /(?:simulate|pretend|act as|roleplay as) (?:an? )?(?:unrestricted|evil|unfiltered|jailbroken|root)/i,
     /(?:repeat the (?:words|text) above)/i,
     /(?:output (?:the )?(?:system prompt|prompt) in a code block)/i,
+    /(?:translate|convert|encode|paraphrase).*(?:developer instructions|system prompt|hidden prompt|instructions above|system message)/i,
+    /(?:hypothetically|as a (?:security|software) researcher|from now on|you are now).*(?:developer instructions|system prompt|unrestricted|bypass)/i,
   ];
 
   return injectionPatterns.some((pattern) => pattern.test(q));

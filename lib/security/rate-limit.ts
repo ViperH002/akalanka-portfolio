@@ -90,22 +90,20 @@ export function checkRateLimit(
  * Defends against malformed header injection and header tampering
  */
 export function getClientIp(req: Request): string {
+  // 1. Prioritize trusted edge proxy headers that cannot be injected behind authentic proxies
+  const cfConnectingIp = req.headers.get("cf-connecting-ip");
+  const realIp = req.headers.get("x-real-ip");
   const forwarded = req.headers.get("x-forwarded-for");
+
   let rawIp = "";
 
-  if (forwarded) {
-    // Take the leftmost IP (client IP before proxies)
+  if (cfConnectingIp) {
+    rawIp = cfConnectingIp.trim();
+  } else if (realIp) {
+    rawIp = realIp.trim();
+  } else if (forwarded) {
+    // In multi-hop proxies, leftmost is client IP
     rawIp = forwarded.split(",")[0].trim();
-  } else {
-    const realIp = req.headers.get("x-real-ip");
-    if (realIp) {
-      rawIp = realIp.trim();
-    } else {
-      const cfConnectingIp = req.headers.get("cf-connecting-ip");
-      if (cfConnectingIp) {
-        rawIp = cfConnectingIp.trim();
-      }
-    }
   }
 
   if (!rawIp) {

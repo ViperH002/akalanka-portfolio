@@ -1,8 +1,8 @@
 import { SiteConfig } from "@/types";
 
 export const siteConfig: SiteConfig = {
-  name: "DevCraft",
-  title: "Full Stack Web Development | React, Next.js & Node.js Expert",
+  name: "Akalanka Portfolio",
+  title: "Akalanka Portfolio",
   description:
     "I will develop a modern, responsive, full stack website for your business using React, Next.js, Node.js, and Laravel. 500+ projects delivered with 100% satisfaction.",
   author: "Akalanka Egodawatte",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { checkRateLimitAsync, getClientIp } from "@/lib/security/rate-limit";
 import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { contactService } from "@/services/contact.service";
 import { logger } from "@/lib/logger";
@@ -39,9 +39,9 @@ export async function POST(req: Request) {
 
     const ip = getClientIp(req);
 
-    // 1. IP Rate Limiting: Max 5 transmissions per hour per IP
+    // 1. IP Rate Limiting: Max 5 transmissions per hour per IP (Distributed via Upstash Redis with in-memory fallback)
     const rateLimitKey = `contact:${ip}`;
-    const limit = checkRateLimit(rateLimitKey, 5, 3600_000);
+    const limit = await checkRateLimitAsync(rateLimitKey, 5, 3600_000);
 
     if (!limit.allowed) {
       logger.warn("Contact transmission rate limit exceeded", {

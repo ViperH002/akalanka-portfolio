@@ -237,7 +237,7 @@ const defaultGrowthData: AnalyticsGrowthPoint[] = [
 // Default site profile settings
 const defaultSettings: SiteProfileSettings = {
   developerName: "Akalanka Egodawatte",
-  title: "Full Stack Web Development | React, Next.js & Node.js Expert",
+  title: "Akalanka Portfolio",
   headlineName1: "AKALANKA",
   headlineName2: "EGODAWATTE",
   subtitle: "WEB DESIGNER & UI/UX CREATOR",
@@ -296,6 +296,25 @@ function initializeStoreOnce() {
     const savedAnalytics = localStorage.getItem(STORAGE_KEYS.ANALYTICS);
     const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
 
+    let initialSettings = savedSettings ? JSON.parse(savedSettings) : defaultSettings;
+    // Auto-migrate legacy name if previously cached in user browser localStorage
+    if (
+      initialSettings.headlineName1 === "RAYHAN" ||
+      initialSettings.headlineName2 === "ADITYA" ||
+      initialSettings.developerName === "Rayhan Aditya"
+    ) {
+      initialSettings = {
+        ...initialSettings,
+        headlineName1: "AKALANKA",
+        headlineName2: "EGODAWATTE",
+        developerName: "Akalanka Egodawatte",
+        title: "Akalanka Portfolio",
+      };
+      try {
+        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(initialSettings));
+      } catch {}
+    }
+
     currentState = {
       isLoaded: true,
       packages: savedPackages ? JSON.parse(savedPackages) : defaultPackages,
@@ -303,7 +322,7 @@ function initializeStoreOnce() {
       transmissions: savedTransmissions ? JSON.parse(savedTransmissions) : defaultTransmissions,
       visitorLogs: savedLogs ? JSON.parse(savedLogs) : defaultVisitorLogs,
       growthData: savedAnalytics ? JSON.parse(savedAnalytics) : defaultGrowthData,
-      settings: savedSettings ? JSON.parse(savedSettings) : defaultSettings,
+      settings: initialSettings,
     };
     emitChange();
   } catch (e) {

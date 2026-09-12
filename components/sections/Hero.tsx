@@ -103,9 +103,9 @@ export function Hero() {
 
           {/* Massive Condensed Headline Name */}
           <h1 className="font-display text-6xl sm:text-7xl lg:text-8xl xl:text-9xl font-black uppercase tracking-tight text-white leading-[0.88] my-2 drop-shadow-2xl">
-            {settings.headlineName1 || "RAYHAN"}
+            {settings.headlineName1 && settings.headlineName1 !== "RAYHAN" ? settings.headlineName1 : "AKALANKA"}
             <br />
-            {settings.headlineName2 || "ADITYA"}
+            {settings.headlineName2 && settings.headlineName2 !== "ADITYA" ? settings.headlineName2 : "EGODAWATTE"}
           </h1>
 
           {/* Crimson Subtitle */}

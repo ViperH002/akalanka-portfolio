@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatRequestSchema } from "@/lib/validation/chat";
-import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { checkRateLimitAsync, getClientIp } from "@/lib/security/rate-limit";
 import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { aiService } from "@/services/ai.service";
 import { logger } from "@/lib/logger";
@@ -15,10 +15,10 @@ export async function POST(req: NextRequest) {
       return csrfErrorResponse();
     }
 
-    // 1. Enforce IP-based rate limiting
+    // 1. Enforce IP-based rate limiting (Distributed Upstash Redis with in-memory fallback)
     const clientIp = getClientIp(req);
     const maxChatPerMinute = parseInt(process.env.RATE_LIMIT_CHAT_PER_MINUTE || "25", 10);
-    const rateLimit = checkRateLimit(`chat_${clientIp}`, maxChatPerMinute, 60_000);
+    const rateLimit = await checkRateLimitAsync(`chat_${clientIp}`, maxChatPerMinute, 60_000);
 
     if (!rateLimit.allowed) {
       logger.warn("AI chat rate limit reached", {

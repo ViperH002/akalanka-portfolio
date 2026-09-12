@@ -2,9 +2,14 @@
 
 const isProd = process.env.NODE_ENV === 'production';
 
+// In production, 'unsafe-eval' is strictly eliminated to prevent string-to-code execution.
+// 'unsafe-inline' is retained for App Router inline hydration scripts; nonces require edge middleware.
+const scriptSrc = isProd ? "'self' 'unsafe-inline'" : "'self' 'unsafe-inline' 'unsafe-eval'";
+const upgradeInsecure = isProd ? "upgrade-insecure-requests;" : "";
+
 const ContentSecurityPolicy = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  script-src ${scriptSrc};
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com data:;
   img-src 'self' data: blob: https://images.unsplash.com;
@@ -14,6 +19,7 @@ const ContentSecurityPolicy = `
   frame-ancestors 'none';
   base-uri 'self';
   form-action 'self';
+  ${upgradeInsecure}
 `.replace(/\s{2,}/g, ' ').trim();
 
 const securityHeaders = [

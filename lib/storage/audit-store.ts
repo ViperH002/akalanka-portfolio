@@ -40,10 +40,21 @@ class AuditStore {
       this.memoryBuffer.shift();
     }
 
-    // 2. Append JSON Line to audit log file
+    // 2. Append JSON Line to audit log file with automatic 10MB log rotation
     try {
       const dir = path.dirname(this.logPath);
       await fs.mkdir(dir, { recursive: true });
+
+      // Check log size and rotate when exceeding 10MB to prevent disk exhaustion (CWE-400)
+      try {
+        const stat = await fs.stat(this.logPath);
+        if (stat.size > 10 * 1024 * 1024) {
+          await fs.rename(this.logPath, `${this.logPath}.1`);
+        }
+      } catch {
+        // File does not exist yet; normal
+      }
+
       const line = JSON.stringify(event) + "\n";
       await fs.appendFile(this.logPath, line, "utf-8");
     } catch (err) {

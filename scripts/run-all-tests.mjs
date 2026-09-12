@@ -145,7 +145,7 @@ async function runMasterSuite() {
   try {
     const contactRes = await fetch(`${BASE_URL}/api/contact`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Real-IP": "10.99.99.1" },
       body: JSON.stringify({
         name: "Security Lead <script>alert(1)</script>",
         email: "architect@nexus.systems",

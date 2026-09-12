@@ -6,9 +6,21 @@ import { useAppStore } from "@/lib/store";
 export function SettingsTab() {
   const { settings, updateSettings, resetToDefaults } = useAppStore();
 
-  const [developerName, setDeveloperName] = useState(settings.developerName || "Rayhan Aditya");
-  const [headlineName1, setHeadlineName1] = useState(settings.headlineName1 || "RAYHAN");
-  const [headlineName2, setHeadlineName2] = useState(settings.headlineName2 || "ADITYA");
+  const [developerName, setDeveloperName] = useState(
+    settings.developerName && settings.developerName !== "Rayhan Aditya"
+      ? settings.developerName
+      : "Akalanka Egodawatte"
+  );
+  const [headlineName1, setHeadlineName1] = useState(
+    settings.headlineName1 && settings.headlineName1 !== "RAYHAN"
+      ? settings.headlineName1
+      : "AKALANKA"
+  );
+  const [headlineName2, setHeadlineName2] = useState(
+    settings.headlineName2 && settings.headlineName2 !== "ADITYA"
+      ? settings.headlineName2
+      : "EGODAWATTE"
+  );
   const [subtitle, setSubtitle] = useState(settings.subtitle || "WEB DESIGNER & UI/UX CREATOR");
   const [bio, setBio] = useState(settings.bio || "");
   const [availableForFreelance, setAvailableForFreelance] = useState(!!settings.availableForFreelance);
@@ -87,7 +99,7 @@ export function SettingsTab() {
                 type="text"
                 value={headlineName1}
                 onChange={(e) => setHeadlineName1(e.target.value)}
-                placeholder="RAYHAN"
+                placeholder="AKALANKA"
                 className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white font-mono text-xs focus:border-red-500 focus:outline-none"
               />
             </div>
@@ -97,7 +109,7 @@ export function SettingsTab() {
                 type="text"
                 value={headlineName2}
                 onChange={(e) => setHeadlineName2(e.target.value)}
-                placeholder="ADITYA"
+                placeholder="EGODAWATTE"
                 className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white font-mono text-xs focus:border-red-500 focus:outline-none"
               />
             </div>

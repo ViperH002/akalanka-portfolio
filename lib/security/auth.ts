@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import {
   getCryptographicSessionSecret,
   getAdministrativePasskey,
@@ -6,6 +8,8 @@ import {
 
 export const ADMIN_COOKIE_NAME = "devcraft_admin_session";
 const SESSION_DURATION_SECONDS = 8 * 60 * 60; // 8 hours
+
+const REVOCATIONS_FILE = path.join(process.cwd(), "data", "revocations.json");
 
 /**
  * Gets server signing secret from validated environment
@@ -50,19 +54,72 @@ interface AdminSessionPayload {
 const revokedSessions = new Map<string, number>();
 
 /**
+ * Initializes revoked session map from persistent disk on startup to survive restarts
+ */
+function loadRevocationsFromDisk(): void {
+  try {
+    if (fs.existsSync(REVOCATIONS_FILE)) {
+      const data = fs.readFileSync(REVOCATIONS_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      const now = Date.now();
+      if (typeof parsed === "object" && parsed !== null) {
+        Object.entries(parsed).forEach(([jti, exp]) => {
+          if (typeof exp === "number" && exp > now) {
+            revokedSessions.set(jti, exp);
+          }
+        });
+      }
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+}
+
+// Run initial load
+loadRevocationsFromDisk();
+
+/**
+ * Atomically writes current non-expired revocations to disk
+ */
+function persistRevocationsToDisk(): void {
+  try {
+    const dir = path.dirname(REVOCATIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const now = Date.now();
+    const record: Record<string, number> = {};
+    revokedSessions.forEach((exp, jti) => {
+      if (exp > now) record[jti] = exp;
+    });
+
+    const tempPath = `${REVOCATIONS_FILE}.${Date.now()}.${Math.random().toString(36).substring(2, 7)}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(record, null, 2), "utf-8");
+    fs.renameSync(tempPath, REVOCATIONS_FILE);
+  } catch {
+    // Non-blocking fallback
+  }
+}
+
+/**
  * Sweeps expired session IDs from revocation map to prevent unbounded growth
  */
 function cleanupRevokedSessions(): void {
   const now = Date.now();
+  let modified = false;
   revokedSessions.forEach((exp, jti) => {
     if (now > exp) {
       revokedSessions.delete(jti);
+      modified = true;
     }
   });
+  if (modified) {
+    persistRevocationsToDisk();
+  }
 }
 
 /**
  * Permanently invalidates a session token server-side upon logout
+ * Writes to memory map, persists to disk, and pushes to Upstash Redis if configured
  */
 export function revokeSessionToken(token: string | undefined | null): void {
   if (!token || typeof token !== "string") return;
@@ -75,7 +132,22 @@ export function revokeSessionToken(token: string | undefined | null): void {
     const payload: Partial<AdminSessionPayload> = JSON.parse(payloadJson);
     if (payload.jti && payload.exp) {
       revokedSessions.set(payload.jti, payload.exp);
+      persistRevocationsToDisk();
       cleanupRevokedSessions();
+
+      // Distributed Upstash Redis synchronization (if configured)
+      const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+      const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+      if (redisUrl && redisToken) {
+        const ttlSec = Math.max(1, Math.ceil((payload.exp - Date.now()) / 1000));
+        const cleanUrl = redisUrl.replace(/\/+$/, "");
+        fetch(`${cleanUrl}/set/revoked:${payload.jti}/1?ex=${ttlSec}`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${redisToken}` },
+        }).catch(() => {
+          // Redis failure falls back gracefully to disk+memory revocation
+        });
+      }
     }
   } catch {
     // Ignore malformed token
