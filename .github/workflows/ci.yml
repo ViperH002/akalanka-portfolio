@@ -1,0 +1,54 @@
+name: Production Quality & Security CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  validate:
+    name: Build, Lint & Verify (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Compiler Verification
+        run: npm run typecheck
+
+      - name: Codebase Static Analysis & Lint
+        run: npm run lint
+
+      - name: Next.js Production Build
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Launch Production Test Server
+        run: |
+          npx next start -p 3000 &
+          node -e "const probe = async () => { for (let i = 0; i < 30; i++) { try { const r = await fetch('http://127.0.0.1:3000/api/health'); if (r.ok) { console.log('Server online!'); process.exit(0); } } catch {} await new Promise(res => setTimeout(res, 1000)); } console.error('Server timed out'); process.exit(1); }; probe();"
+        env:
+          NODE_ENV: production
+          PORT: 3000
+
+      - name: Run Master End-to-End Verification Suite
+        run: npm test
+        env:
+          TEST_URL: http://localhost:3000

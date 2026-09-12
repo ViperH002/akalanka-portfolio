@@ -1,0 +1,58 @@
+import { Testimonial } from "@/types";
+
+export const testimonialsData: Testimonial[] = [
+  {
+    id: "testimonial-1",
+    rating: 5,
+    text: "Exceptional work! He built our entire SaaS platform from scratch — clean code, fast delivery, and incredible attention to detail. Our go-to developer for all future projects.",
+    author: "James Mitchell",
+    role: "CEO, TechVenture Inc.",
+    avatarBg: "linear-gradient(135deg, #ef4444, #991b1b)",
+    initials: "JM",
+  },
+  {
+    id: "testimonial-2",
+    rating: 5,
+    text: "Delivered our e-commerce store 3 days early with more features than we asked for. The Stripe integration works flawlessly. Communication was outstanding throughout.",
+    author: "Sarah Reynolds",
+    role: "Founder, StyleHaven",
+    avatarBg: "linear-gradient(135deg, #dc2626, #7f1d1d)",
+    initials: "SR",
+  },
+  {
+    id: "testimonial-3",
+    rating: 5,
+    text: "We've worked with 5+ developers on Fiverr. This is the first one who truly understood our vision and executed it perfectly. The website is fast, beautiful, and converts like crazy.",
+    author: "Alex Kim",
+    role: "Marketing Director, GrowthLab",
+    avatarBg: "linear-gradient(135deg, #f43f5e, #be123c)",
+    initials: "AK",
+  },
+  {
+    id: "testimonial-4",
+    rating: 5,
+    text: "Engineered a high-throughput API gateway with zero latency under 10k concurrent users. Outstanding architectural skill and clean TypeScript standards.",
+    author: "Marcus Vance",
+    role: "CTO, CloudMatrix Systems",
+    avatarBg: "linear-gradient(135deg, #b91c1c, #450a0a)",
+    initials: "MV",
+  },
+  {
+    id: "testimonial-5",
+    rating: 5,
+    text: "Transformed our sluggish WordPress site into an ultra-fast Next.js web application. Our Google PageSpeed jumped from 38 to 99, and sales doubled in month one.",
+    author: "Elena Rostova",
+    role: "VP of Product, OmniRetail",
+    avatarBg: "linear-gradient(135deg, #ef4444, #b91c1c)",
+    initials: "ER",
+  },
+  {
+    id: "testimonial-6",
+    rating: 5,
+    text: "The glassmorphic design and 3D scroll animations blew our investors away during our Series A pitch. Delivered on time with spotless documentation.",
+    author: "David Chen",
+    role: "Co-Founder, NeuralFlow AI",
+    avatarBg: "linear-gradient(135deg, #f87171, #dc2626)",
+    initials: "DC",
+  },
+];

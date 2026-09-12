@@ -1,0 +1,79 @@
+                         ┌──────────────────────────┐
+                         │      Portfolio Website   │
+                         │      Next.js / React     │
+                         └────────────┬─────────────┘
+                                      │
+                         Chat message / microphone
+                                      │
+                                      ▼
+                    ┌────────────────────────────────┐
+                    │       Chatbot UI Layer         │
+                    │                                │
+                    │ • Chat messages                │
+                    │ • Voice button                 │
+                    │ • Speaking animation            │
+                    │ • Audio player                 │
+                    │ • Typing/thinking indicator    │
+                    └───────────────┬────────────────┘
+                                    │
+                              HTTPS / Streaming
+                                    │
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │      Next.js Server/API        │
+                    │                                │
+                    │ /api/chat                      │
+                    │ /api/tts                       │
+                    │ /api/stt                       │
+                    │ /api/portfolio                 │
+                    │                                │
+                    │ Security / rate limiting       │
+                    │ Prompt management              │
+                    │ Context management             │
+                    └───────┬───────────────┬────────┘
+                            │               │
+                            ▼               ▼
+                 ┌─────────────────┐   ┌─────────────────┐
+                 │       LLM       │   │   Portfolio DB  │
+                 │                 │   │                 │
+                 │ GPT / other LLM │◄──┤ Projects        │
+                 │                 │   │ Skills          │
+                 └────────┬────────┘   │ Experience      │
+                          │            │ Education       │
+                          │            │ Contact         │
+                          │            └─────────────────┘
+                          ▼
+                 ┌─────────────────────┐
+                 │        TTS          │
+                 │    ElevenLabs       │
+                 │                     │
+                 │ Megatron-inspired   │
+                 │ deep robotic voice  │
+                 └──────────┬──────────┘
+                            │
+                       Audio stream
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │ Browser Audio       │
+                 │ Playback            │
+                 └─────────────────────┘
+
+Optional voice input:
+
+Microphone
+    │
+    ▼
+Speech-to-Text
+    │
+    ▼
+/api/chat
+    │
+    ▼
+LLM
+    │
+    ▼
+TTS
+    │
+    ▼
+Speaker
