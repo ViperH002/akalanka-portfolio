@@ -54,7 +54,7 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
-  output: 'standalone',
+  output: process.env.DOCKER_BUILD ? 'standalone' : undefined,
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
