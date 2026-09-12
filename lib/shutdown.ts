@@ -8,6 +8,16 @@ let isShuttingDown = false;
  */
 export function setupGracefulShutdown(): void {
   if (typeof process === "undefined" || !process.on) return;
+  // Never intercept process signals during build, CI, or on Vercel/AWS Lambda serverless runners
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.VERCEL === "1" ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.CI === "1" ||
+    process.env.CI === "true"
+  ) {
+    return;
+  }
   if (isShuttingDown) return;
 
   const handleSignal = (signal: string) => {
@@ -31,6 +41,3 @@ export function setupGracefulShutdown(): void {
   process.on("SIGTERM", () => handleSignal("SIGTERM"));
   process.on("SIGINT", () => handleSignal("SIGINT"));
 }
-
-// Automatically bind signal handlers upon module evaluation
-setupGracefulShutdown();
