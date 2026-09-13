@@ -1,14 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
+import { VisitorLog } from "@/types";
 
 export function VisitorLogsTab() {
-  const { visitorLogs } = useAppStore();
+  const { visitorLogs: localLogs } = useAppStore();
+  const [logs, setLogs] = useState<VisitorLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [deviceFilter, setDeviceFilter] = useState<string>("all");
 
-  const filteredLogs = visitorLogs.filter((log) => {
+  const fetchLiveLogs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/telemetry", {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.logs) && data.logs.length > 0) {
+          setLogs(data.logs);
+          return;
+        }
+      }
+      setLogs(localLogs);
+    } catch {
+      setLogs(localLogs);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [localLogs]);
+
+  useEffect(() => {
+    fetchLiveLogs();
+    // Auto-poll live stream every 20 seconds
+    const timer = setInterval(fetchLiveLogs, 20_000);
+    return () => clearInterval(timer);
+  }, [fetchLiveLogs]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchLiveLogs();
+  };
+
+  const filteredLogs = logs.filter((log) => {
     if (deviceFilter !== "all" && log.device !== deviceFilter) return false;
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
@@ -19,7 +58,8 @@ export function VisitorLogsTab() {
         log.countryCode.toLowerCase().includes(q) ||
         log.browser.toLowerCase().includes(q) ||
         log.os.toLowerCase().includes(q) ||
-        log.page.toLowerCase().includes(q)
+        log.page.toLowerCase().includes(q) ||
+        log.referrer.toLowerCase().includes(q)
       );
     }
     return true;
@@ -43,8 +83,18 @@ export function VisitorLogsTab() {
           </p>
         </div>
 
-        {/* Filters */}
+        {/* Filters and Controls */}
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs border border-white/10 transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            title="Refresh Inbound Telemetry"
+          >
+            <span className={isRefreshing ? "animate-spin" : ""}>🔄</span>
+            <span className="hidden sm:inline">Sync Live</span>
+          </button>
+
           <select
             value={deviceFilter}
             onChange={(e) => setDeviceFilter(e.target.value)}
@@ -82,7 +132,14 @@ export function VisitorLogsTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filteredLogs.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-neutral-400 font-mono">
+                    <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    ACQUIRING LIVE TELEMETRY STREAM...
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-neutral-500 font-mono">
                     No telemetry packets recorded matching query.

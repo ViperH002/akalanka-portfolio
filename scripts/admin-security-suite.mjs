@@ -70,6 +70,30 @@ async function request(path, options = {}) {
   });
 }
 
+function computeTotp(secret) {
+  const BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = secret.toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+  let bits = 0, val = 0, bytes = [];
+  for (let c of clean) {
+    let idx = BASE32_CHARS.indexOf(c);
+    if (idx === -1) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((val >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  const key = Buffer.from(bytes);
+  const tc = Math.floor(Date.now() / 1000 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigInt64BE(BigInt(tc), 0);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0x0f;
+  const code = ((hmac[off] & 0x7f) << 24) | ((hmac[off + 1] & 0xff) << 16) | ((hmac[off + 2] & 0xff) << 8) | (hmac[off + 3] & 0xff);
+  return (code % 1000000).toString().padStart(6, "0");
+}
+
 async function runPhase25Tests() {
   console.log("===============================================================================");
   console.log(" VIPERS.LIVE — PHASE 25 AUTOMATED ADMIN SECURITY TEST SUITE");
@@ -96,12 +120,23 @@ async function runPhase25Tests() {
 
   // --- TEST 3: Authenticated ADMIN Login & Clearance ---
   console.log("\n[Test 3] Testing ADMIN Authentication & Session Grant...");
-  const loginRes = await request("/api/admin/login", {
+  let loginRes = await request("/api/admin/login", {
     method: "POST",
     headers: { Origin: "http://localhost:3000" },
     body: { passcode: process.env.ADMIN_SECRET_KEY || "admin2026" },
     ip: "10.1.1.3",
   });
+
+  if (loginRes.status === 200 && loginRes.body?.requiresMfa) {
+    const mfaSecret = process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG";
+    const mfaCode = computeTotp(mfaSecret);
+    loginRes = await request("/api/admin/login", {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000" },
+      body: { passcode: process.env.ADMIN_SECRET_KEY || "admin2026", mfaCode },
+      ip: "10.1.1.3",
+    });
+  }
 
   const isLoginSuccessful = loginRes.status === 200 && loginRes.body?.success === true;
   assert(isLoginSuccessful, `Admin login successful (HTTP ${loginRes.status})`);

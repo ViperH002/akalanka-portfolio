@@ -24,6 +24,30 @@ function assert(condition, message, details = "") {
   }
 }
 
+function computeTotp(secret) {
+  const BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = secret.toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+  let bits = 0, val = 0, bytes = [];
+  for (let c of clean) {
+    let idx = BASE32_CHARS.indexOf(c);
+    if (idx === -1) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((val >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  const key = Buffer.from(bytes);
+  const tc = Math.floor(Date.now() / 1000 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigInt64BE(BigInt(tc), 0);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0x0f;
+  const code = ((hmac[off] & 0x7f) << 24) | ((hmac[off + 1] & 0xff) << 16) | ((hmac[off + 2] & 0xff) << 8) | (hmac[off + 3] & 0xff);
+  return (code % 1000000).toString().padStart(6, "0");
+}
+
 async function runRegressionSuite() {
   console.log("===============================================================================");
   console.log(" COMPREHENSIVE ADVERSARIAL SECURITY REGRESSION SUITE");
@@ -53,11 +77,20 @@ async function runRegressionSuite() {
   console.log("\n[2] Testing Persistent Session Revocation...");
   try {
     // 2a. Perform login
-    const loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+    let loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.1.1" },
       body: JSON.stringify({ passcode: "admin2026" }),
     });
+    let loginData = await loginRes.json();
+    if (loginData.requiresMfa) {
+      const mfaCode = computeTotp(process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG");
+      loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.1.1" },
+        body: JSON.stringify({ passcode: "admin2026", mfaCode }),
+      });
+    }
     assert(loginRes.status === 200, "Admin login successful for revocation test");
     const cookieHeader = loginRes.headers.get("set-cookie") || "";
     const tokenMatch = cookieHeader.match(/devcraft_admin_session=([^;]+)/);
@@ -354,21 +387,39 @@ async function runRegressionSuite() {
   // -------------------------------------------------------------------------
   console.log("\n[11] Testing Session Fixation & Fresh Token Issuance...");
   try {
-    const res1 = await fetch(`${BASE_URL}/api/admin/login`, {
+    let res1 = await fetch(`${BASE_URL}/api/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.11.1" },
       body: JSON.stringify({ passcode: "admin2026" }),
     });
+    let d1 = await res1.json();
+    if (d1.requiresMfa) {
+      const mfaCode = computeTotp(process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG");
+      res1 = await fetch(`${BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.11.1" },
+        body: JSON.stringify({ passcode: "admin2026", mfaCode }),
+      });
+    }
     const cookie1 = res1.headers.get("set-cookie") || "";
 
-    const res2 = await fetch(`${BASE_URL}/api/admin/login`, {
+    let res2 = await fetch(`${BASE_URL}/api/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.11.2" },
       body: JSON.stringify({ passcode: "admin2026" }),
     });
+    let d2 = await res2.json();
+    if (d2.requiresMfa) {
+      const mfaCode = computeTotp(process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG");
+      res2 = await fetch(`${BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Real-IP": "10.0.11.2" },
+        body: JSON.stringify({ passcode: "admin2026", mfaCode }),
+      });
+    }
     const cookie2 = res2.headers.get("set-cookie") || "";
 
-    assert(cookie1 !== cookie2, "Each successful authentication issues a distinct, freshly generated token (Fixation Immune)");
+    assert(Boolean(cookie1) && Boolean(cookie2) && cookie1 !== cookie2, "Each successful authentication issues a distinct, freshly generated token (Fixation Immune)");
   } catch (err) {
     assert(false, "Session fixation check failed", err.message);
   }

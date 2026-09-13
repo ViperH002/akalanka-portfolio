@@ -3,10 +3,36 @@
  * Validates all routes, security parameters, caching, SEO, accessibility, and backend services.
  */
 
+import crypto from "crypto";
+
 const BASE_URL = process.env.TEST_URL || "http://localhost:3000";
 
 let totalTests = 0;
 let passedTests = 0;
+
+function computeTotp(secret) {
+  const BASE32_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = secret.toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+  let bits = 0, val = 0, bytes = [];
+  for (let c of clean) {
+    let idx = BASE32_CHARS.indexOf(c);
+    if (idx === -1) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((val >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  const key = Buffer.from(bytes);
+  const tc = Math.floor(Date.now() / 1000 / 30);
+  const buf = Buffer.alloc(8);
+  buf.writeBigInt64BE(BigInt(tc), 0);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0x0f;
+  const code = ((hmac[off] & 0x7f) << 24) | ((hmac[off + 1] & 0xff) << 16) | ((hmac[off + 2] & 0xff) << 8) | (hmac[off + 3] & 0xff);
+  return (code % 1000000).toString().padStart(6, "0");
+}
 
 function assert(condition, message) {
   totalTests++;
@@ -84,13 +110,23 @@ async function runMasterSuite() {
     assert(unauthJson.authenticated === false, "Unauthenticated session check rejected");
 
     // 5b. Authenticated login
-    const loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+    let loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ passcode: "admin2026" }),
     });
     assert(loginRes.status === 200, `Login status 200 (received ${loginRes.status})`);
-    const loginJson = await loginRes.json();
+    let loginJson = await loginRes.json();
+    if (loginJson.requiresMfa) {
+      const mfaSecret = process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG";
+      const mfaCode = computeTotp(mfaSecret);
+      loginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passcode: "admin2026", mfaCode }),
+      });
+      loginJson = await loginRes.json();
+    }
     assert(loginJson.success === true, "Login clearance granted");
 
     const setCookie = loginRes.headers.get("set-cookie") || "";
@@ -249,6 +285,51 @@ async function runMasterSuite() {
     assert(homeHtml.includes('id="main-content"'), 'Main landmark <main id="main-content"> present');
   } catch (err) {
     assert(false, `Homepage check failed: ${err.message}`);
+  }
+
+  // 13. Live Telemetry & Real Admin Data API
+  console.log("\n[13] Verifying Live Telemetry & Real Admin Pipeline...");
+  try {
+    // 13a. Public Telemetry visit recording
+    const visitRes = await fetch(`${BASE_URL}/api/telemetry/visit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: "/test-automated-visit", referrer: "https://google.com" }),
+    });
+    assert(visitRes.status === 200, `Telemetry visit recorded status 200 (received ${visitRes.status})`);
+    const visitData = await visitRes.json();
+    assert(visitData.success === true, "Telemetry visit successfully acknowledged");
+
+    // 13b. Unauthenticated access to admin telemetry rejected
+    const unauthTelemRes = await fetch(`${BASE_URL}/api/admin/telemetry`);
+    assert(unauthTelemRes.status === 401, `Unauthenticated telemetry access rejected with 401 (received ${unauthTelemRes.status})`);
+
+    // 13c. Authenticated admin access to telemetry
+    let mfaCode = computeTotp(process.env.ADMIN_MFA_SECRET || "MXPA5HZMDUSACWXA4KKMYB4BFG5DTJMG");
+    const adminLoginRes = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passcode: "admin2026", mfaCode }),
+    });
+    const adminCookie = (adminLoginRes.headers.get("set-cookie") || "").split(";")[0];
+
+    const telemRes = await fetch(`${BASE_URL}/api/admin/telemetry`, {
+      headers: { Cookie: adminCookie },
+    });
+    assert(telemRes.status === 200, `Authenticated telemetry status is 200 (received ${telemRes.status})`);
+    const telemData = await telemRes.json();
+    assert(Array.isArray(telemData.logs), "Telemetry returns live logs array");
+    assert(Boolean(telemData.metrics), "Telemetry returns live metrics object");
+
+    // 13d. Authenticated admin access to real transmissions
+    const transRes = await fetch(`${BASE_URL}/api/admin/transmissions`, {
+      headers: { Cookie: adminCookie },
+    });
+    assert(transRes.status === 200, `Authenticated transmissions status is 200 (received ${transRes.status})`);
+    const transData = await transRes.json();
+    assert(Array.isArray(transData.transmissions), "Transmissions returns live leads array");
+  } catch (err) {
+    assert(false, `Telemetry check failed: ${err.message}`);
   }
 
   // Summary

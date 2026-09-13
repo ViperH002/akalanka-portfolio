@@ -13,6 +13,7 @@ export interface StoredLead {
   sourceIp: string;
   dispatchStatus: "dispatched" | "buffered" | "failed";
   transmissionId: string | null;
+  status?: "unread" | "read" | "replied" | "archived";
 }
 
 class LeadStore {
@@ -134,9 +135,38 @@ class LeadStore {
   /**
    * Retrieves recent inquiries (for admin audit or export)
    */
-  async getRecentLeads(limit = 50): Promise<StoredLead[]> {
+  async getRecentLeads(limit = 100): Promise<StoredLead[]> {
     await this.ensureInitialized();
     return this.memoryBuffer.slice(-limit).reverse();
+  }
+
+  /**
+   * Updates lead status (unread / read / replied / archived)
+   */
+  async updateLeadStatus(
+    id: string,
+    status: "unread" | "read" | "replied" | "archived"
+  ): Promise<boolean> {
+    await this.ensureInitialized();
+    const target = this.memoryBuffer.find((l) => l.id === id);
+    if (!target) return false;
+    target.status = status;
+    await this.persistBufferAtomically();
+    return true;
+  }
+
+  /**
+   * Deletes a lead permanently
+   */
+  async deleteLead(id: string): Promise<boolean> {
+    await this.ensureInitialized();
+    const initialLen = this.memoryBuffer.length;
+    this.memoryBuffer = this.memoryBuffer.filter((l) => l.id !== id);
+    if (this.memoryBuffer.length !== initialLen) {
+      await this.persistBufferAtomically();
+      return true;
+    }
+    return false;
   }
 }
 

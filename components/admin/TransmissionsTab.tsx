@@ -1,16 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
 import { TransmissionMessage } from "@/types";
 
 export function TransmissionsTab() {
-  const { transmissions, updateTransmissionStatus, deleteTransmission } = useAppStore();
+  const { transmissions: localTransmissions } = useAppStore();
+  const [messages, setMessages] = useState<TransmissionMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread" | "read" | "replied" | "archived">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMessage, setActiveMessage] = useState<TransmissionMessage | null>(null);
 
-  const filteredMessages = transmissions.filter((msg) => {
+  // Fetch real leads from authenticated server API
+  const fetchLiveTransmissions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/transmissions", {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.transmissions)) {
+          setMessages(data.transmissions);
+          return;
+        }
+      }
+      // Fallback to local store if server is unreachable
+      setMessages(localTransmissions);
+    } catch {
+      setMessages(localTransmissions);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [localTransmissions]);
+
+  useEffect(() => {
+    fetchLiveTransmissions();
+  }, [fetchLiveTransmissions]);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchLiveTransmissions();
+  };
+
+  const handleUpdateStatus = async (id: string, status: "unread" | "read" | "replied" | "archived") => {
+    // Optimistic UI update
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, status } : m))
+    );
+    if (activeMessage && activeMessage.id === id) {
+      setActiveMessage((prev) => (prev ? { ...prev, status } : null));
+    }
+
+    try {
+      await fetch("/api/admin/transmissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+    } catch (err) {
+      console.error("Failed to sync transmission status:", err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this transmission permanently?")) return;
+
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    if (activeMessage?.id === id) setActiveMessage(null);
+
+    try {
+      await fetch(`/api/admin/transmissions?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("Failed to delete transmission:", err);
+    }
+  };
+
+  const handleOpenMessage = (msg: TransmissionMessage) => {
+    setActiveMessage(msg);
+    if (msg.status === "unread") {
+      handleUpdateStatus(msg.id, "read");
+    }
+  };
+
+  const filteredMessages = messages.filter((msg) => {
     if (filter !== "all" && msg.status !== filter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -25,21 +104,7 @@ export function TransmissionsTab() {
     return true;
   });
 
-  const unreadCount = transmissions.filter((m) => m.status === "unread").length;
-
-  const handleOpenMessage = (msg: TransmissionMessage) => {
-    setActiveMessage(msg);
-    if (msg.status === "unread") {
-      updateTransmissionStatus(msg.id, "read");
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this transmission permanently?")) {
-      deleteTransmission(id);
-      if (activeMessage?.id === id) setActiveMessage(null);
-    }
-  };
+  const unreadCount = messages.filter((m) => m.status === "unread").length;
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -50,6 +115,9 @@ export function TransmissionsTab() {
             <h2 className="text-xl font-black text-white font-mono tracking-wide">
               📥 INCOMING_TRANSMISSIONS_HUB
             </h2>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              ● SERVER_CONNECTED
+            </span>
             {unreadCount > 0 && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-red-600 text-white animate-pulse">
                 {unreadCount} NEW
@@ -61,15 +129,26 @@ export function TransmissionsTab() {
           </p>
         </div>
 
-        {/* Search input */}
-        <div className="w-full sm:w-64">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sender, budget, text..."
-            className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white font-mono text-xs focus:border-red-500 focus:outline-none"
-          />
+        {/* Controls: Search and Refresh */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs border border-white/10 transition-all flex items-center gap-1.5 shrink-0"
+            title="Refresh Live Inbound Stream"
+          >
+            <span className={isRefreshing ? "animate-spin" : ""}>🔄</span>
+            <span className="hidden sm:inline">Sync Live</span>
+          </button>
+          <div className="w-full sm:w-64">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sender, budget, text..."
+              className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white font-mono text-xs focus:border-red-500 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
@@ -78,8 +157,8 @@ export function TransmissionsTab() {
         {(["all", "unread", "read", "replied", "archived"] as const).map((tabKey) => {
           const count =
             tabKey === "all"
-              ? transmissions.length
-              : transmissions.filter((m) => m.status === tabKey).length;
+              ? messages.length
+              : messages.filter((m) => m.status === tabKey).length;
           return (
             <button
               key={tabKey}
@@ -101,10 +180,16 @@ export function TransmissionsTab() {
 
       {/* Message List */}
       <div className="space-y-3">
-        {filteredMessages.length === 0 ? (
+        {isLoading ? (
+          <div className="p-12 text-center rounded-2xl bg-[#0d0714]/60 border border-white/5">
+            <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs font-mono text-neutral-400">CONNECTING TO SECURE TELEMETRY BUFFER...</p>
+          </div>
+        ) : filteredMessages.length === 0 ? (
           <div className="p-12 text-center rounded-2xl bg-[#0d0714]/60 border border-white/5">
             <div className="text-3xl mb-2">📡</div>
             <p className="text-sm font-mono text-neutral-400">No transmission packets match this filter.</p>
+            <p className="text-xs font-mono text-neutral-500 mt-1">Real submissions via /#contact will automatically stream into this node.</p>
           </div>
         ) : (
           filteredMessages.map((msg) => (
@@ -191,7 +276,7 @@ export function TransmissionsTab() {
 
               <button
                 onClick={() => setActiveMessage(null)}
-                className="text-neutral-400 hover:text-white font-mono text-sm p-1"
+                className="text-neutral-400 hover:text-white font-mono text-sm p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -221,20 +306,20 @@ export function TransmissionsTab() {
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => updateTransmissionStatus(activeMessage.id, "replied")}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-mono transition-all"
+                  onClick={() => handleUpdateStatus(activeMessage.id, "replied")}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-mono transition-all cursor-pointer"
                 >
                   Mark Replied
                 </button>
                 <button
-                  onClick={() => updateTransmissionStatus(activeMessage.id, "archived")}
-                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10 text-xs font-mono transition-all"
+                  onClick={() => handleUpdateStatus(activeMessage.id, "archived")}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10 text-xs font-mono transition-all cursor-pointer"
                 >
                   Archive
                 </button>
                 <button
                   onClick={() => handleDelete(activeMessage.id)}
-                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-mono transition-all"
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-mono transition-all cursor-pointer"
                 >
                   Delete
                 </button>
