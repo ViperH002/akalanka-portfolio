@@ -3,6 +3,9 @@
  * Challenges existing security controls and exposes potential bypasses and architectural edge-cases.
  */
 
+import fs from "fs";
+import path from "path";
+
 const BASE_URL = process.env.TEST_URL || "http://localhost:3000";
 
 async function runAdversarialTests() {
@@ -134,8 +137,20 @@ async function runAdversarialTests() {
 
   // 5. Distributed Rate Limiter Disconnect
   console.log("\n[AUDIT 5] Verifying Route Rate Limiting Implementation...");
-  // Check if routes call checkRateLimit vs checkRateLimitAsync
-  console.log("  ℹ️ Code inspection confirmed: /api/contact and /api/chat call synchronous checkRateLimit(), bypassing checkRateLimitAsync() distributed Upstash Redis.");
+  const contactCode = fs.readFileSync(path.join(process.cwd(), "app/api/contact/route.ts"), "utf-8");
+  const chatCode = fs.readFileSync(path.join(process.cwd(), "app/api/chat/route.ts"), "utf-8");
+  const ttsCode = fs.readFileSync(path.join(process.cwd(), "app/api/tts/route.ts"), "utf-8");
+  const allAsync = contactCode.includes("checkRateLimitAsync") && chatCode.includes("checkRateLimitAsync") && ttsCode.includes("checkRateLimitAsync");
+  if (allAsync) {
+    console.log("  ✓ Confirmed: /api/contact, /api/chat, and /api/tts call checkRateLimitAsync() with Upstash Redis distributed support.");
+  } else {
+    findings.push({
+      id: "ADV-05",
+      title: "Rate Limiter Disconnect",
+      severity: "LOW",
+      detail: "Some routes are still calling synchronous checkRateLimit()",
+    });
+  }
 
   console.log("\n===============================================================");
   console.log(` ADVERSARIAL AUDIT COMPLETE: ${findings.length} SIGNIFICANT FINDINGS IDENTIFIED`);

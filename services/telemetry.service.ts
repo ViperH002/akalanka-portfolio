@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { isSafeGitHubUsername } from "@/lib/security/ssrf";
 
 interface GitHubRepoItem {
   id: number;
@@ -56,8 +57,10 @@ export class TelemetryService {
    */
   async getGitHubTelemetry(): Promise<GitHubTelemetryResult> {
     const token = process.env.GITHUB_TOKEN;
-    const rawUsername = process.env.GITHUB_USERNAME || "ViperH002";
-    const safeUsername = encodeURIComponent(rawUsername.trim());
+    const rawUsername = (process.env.GITHUB_USERNAME || "ViperH002").trim();
+    const safeUsername = isSafeGitHubUsername(rawUsername)
+      ? encodeURIComponent(rawUsername)
+      : "ViperH002";
 
     const headers: Record<string, string> = {
       "User-Agent": "Akalanka-Portfolio-Sync",

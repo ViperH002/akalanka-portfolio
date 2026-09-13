@@ -1,5 +1,6 @@
 import { VoiceConfig } from "@/types/ai";
 import { logger } from "@/lib/logger";
+import { isSafeVoiceId } from "@/lib/security/ssrf";
 
 /**
  * ElevenLabs Text-to-Speech Service
@@ -67,14 +68,15 @@ export async function generateSpeechAudio(textToSpeak: string): Promise<Buffer |
     return null;
   }
 
-  const voiceId = encodeURIComponent(DEFAULT_VOICE_CONFIG.voiceId.trim());
-  const cacheKey = `${voiceId}_${cleanText}`;
+  const rawVoiceId = DEFAULT_VOICE_CONFIG.voiceId.trim();
+  const safeVoiceId = isSafeVoiceId(rawVoiceId) ? encodeURIComponent(rawVoiceId) : "pNInz6obpgDQGcFmaJgB";
+  const cacheKey = `${safeVoiceId}_${cleanText}`;
 
   if (audioCache.has(cacheKey)) {
     return audioCache.get(cacheKey)!;
   }
 
-  const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=3`;
+  const endpoint = `https://api.elevenlabs.io/v1/text-to-speech/${safeVoiceId}?optimize_streaming_latency=3`;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20_000);

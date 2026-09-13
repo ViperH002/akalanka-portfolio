@@ -128,12 +128,12 @@ export class ContactService {
     const receivedAt = new Date().toISOString();
 
     const sanitized = {
-      name: sanitizeString(input.name),
-      email: input.email.toLowerCase().trim(),
-      projectType: input.projectType,
-      budget: input.budget,
+      name: sanitizeString(input.name).replace(/[\r\n]/g, " ").trim(),
+      email: input.email.toLowerCase().trim().replace(/[\r\n]/g, ""),
+      projectType: input.projectType.replace(/[\r\n]/g, ""),
+      budget: input.budget.replace(/[\r\n]/g, ""),
       message: sanitizeString(input.message),
-      sourceIp: input.sourceIp,
+      sourceIp: input.sourceIp.replace(/[\r\n]/g, ""),
       receivedAt,
     };
 

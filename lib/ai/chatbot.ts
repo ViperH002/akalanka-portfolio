@@ -32,7 +32,13 @@ function isPromptInjectionAttempt(query: string): boolean {
     /(?:repeat the (?:words|text) above)/i,
     /(?:output (?:the )?(?:system prompt|prompt) in a code block)/i,
     /(?:translate|convert|encode|paraphrase).*(?:developer instructions|system prompt|hidden prompt|instructions above|system message)/i,
-    /(?:hypothetically|as a (?:security|software) researcher|from now on|you are now).*(?:developer instructions|system prompt|unrestricted|bypass)/i,
+    /(?:hypothetically|as a (?:security|software) researcher|from now on|you are now|let's play).*(?:developer instructions|system prompt|unrestricted|bypass|precedes our conversation|configuration directives|system message|text that precedes)/i,
+    /(?:print|display|reveal|show|output|repeat|dump).*(?:precedes our conversation|text that precedes|configuration directives)/i,
+    /(?:you are|act as|roleplay as|simulate).*(?:root_terminal|root terminal|unrestricted|developer mode)/i,
+    /(?:<\|im_start\|>|<\|system\|>|<\|assistant\|>|\[INST\]|<<SYS>>|<turn_start>)/i,
+    /(?:format|render|dump|extract).*(?:as json|as markdown|as table).*(?:instructions|rules|prompt)/i,
+    /(?:base64|rot13|hex).*(?:decode|decrypt|translate).*(?:instruction|system|prompt)/i,
+    /(?:new system instruction|forget (?:all|everything|previous)|override all guidelines)/i,
   ];
 
   return injectionPatterns.some((pattern) => pattern.test(q));
@@ -40,7 +46,7 @@ function isPromptInjectionAttempt(query: string): boolean {
 
 /**
  * Security: Output Redaction Filter
- * Defends against unintentional model leakage of API keys, environment variables, or server paths
+ * Defends against unintentional model leakage of API keys, environment variables, server paths, JWTs, or private IPs
  */
 function redactSensitiveOutput(text: string): string {
   if (!text) return text;
@@ -55,6 +61,12 @@ function redactSensitiveOutput(text: string): string {
 
   // Redact ElevenLabs or general hex keys of 32+ length
   cleaned = cleaned.replace(/\b[a-f0-9]{32,64}\b/gi, "[REDACTED_TOKEN]");
+
+  // Redact JWT tokens
+  cleaned = cleaned.replace(/\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\b/g, "[REDACTED_JWT]");
+
+  // Redact RFC 1918 Private IP addresses
+  cleaned = cleaned.replace(/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g, "[REDACTED_IP]");
 
   // Redact environment variable assignments
   cleaned = cleaned.replace(

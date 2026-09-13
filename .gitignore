@@ -41,7 +41,10 @@ videotojpg.com_*
 
 # runtime persistent data & audit trails
 /data/*.json
-/data/*.log
+/data/*.log*
+/data/*.tmp
+/data/*.corrupted.*
+*.tmp
 !/data/cyberFrames.ts
 
 # ide & agent caches

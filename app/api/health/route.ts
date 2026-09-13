@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { getRateLimiterStatus } from "@/lib/security/rate-limit";
+import { checkRateLimit, getClientIp, getRateLimiterStatus } from "@/lib/security/rate-limit";
 import { metricsCollector } from "@/lib/observability/metrics";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,15 @@ export async function GET(request: NextRequest) {
   const startTime = performance.now();
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
   const probeType = request.nextUrl.searchParams.get("probe");
+
+  const ip = getClientIp(request);
+  const rateLimit = checkRateLimit(`health_${ip}`, 120, 60_000);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Health probe rate limit reached. Cool down." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.resetTime) } }
+    );
+  }
 
   const baseHeaders: Record<string, string> = {
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -81,7 +90,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       environment: process.env.NODE_ENV || "development",
-      nodeVersion: process.version,
+      ...(process.env.NODE_ENV !== "production" ? { nodeVersion: process.version } : {}),
       memoryUsage: {
         rssMb: Math.round((memory.rss / (1024 * 1024)) * 10) / 10,
         heapTotalMb: Math.round((memory.heapTotal / (1024 * 1024)) * 10) / 10,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ttsRequestSchema } from "@/lib/validation/chat";
-import { checkRateLimit, getClientIp } from "@/lib/security/rate-limit";
+import { checkRateLimitAsync, getClientIp } from "@/lib/security/rate-limit";
+import { validateOrigin, csrfErrorResponse } from "@/lib/security/csrf";
 import { ttsService } from "@/services/tts.service";
 import { logger } from "@/lib/logger";
 
@@ -8,10 +9,15 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Rate limiting for TTS audio generation
+    // 0. Validate Request Origin (CSRF defense)
+    if (!validateOrigin(req)) {
+      return csrfErrorResponse();
+    }
+
+    // 1. Rate limiting for TTS audio generation (distributed Redis with memory fallback)
     const clientIp = getClientIp(req);
     const maxTtsPerMinute = parseInt(process.env.RATE_LIMIT_TTS_PER_MINUTE || "15", 10);
-    const rateLimit = checkRateLimit(`tts_${clientIp}`, maxTtsPerMinute, 60_000);
+    const rateLimit = await checkRateLimitAsync(`tts_${clientIp}`, maxTtsPerMinute, 60_000);
 
     if (!rateLimit.allowed) {
       logger.warn("TTS rate limit reached", {

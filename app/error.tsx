@@ -42,7 +42,11 @@ export default function GlobalErrorBoundary({
 
         {/* Error Details (Safe preview) */}
         <div className="p-3.5 rounded-xl bg-black/60 border border-white/10 text-left font-mono text-xs text-red-300/80 overflow-x-auto">
-          <code>{error.message || "Unknown runtime fault detected."}</code>
+          <code>
+            {process.env.NODE_ENV === "production"
+              ? "System anomaly recorded and quarantined. Reference incident digest below."
+              : error.message || "Unknown runtime fault detected."}
+          </code>
           {error.digest && (
             <div className="text-[10px] text-neutral-500 mt-1">
               DIGEST: {error.digest}

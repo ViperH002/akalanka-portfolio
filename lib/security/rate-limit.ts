@@ -142,6 +142,23 @@ export function getClientIp(req: Request): string {
 const MAX_LOGIN_FAILURES = 5;
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
+/**
+ * Derives brute-force lockout bucket identifier.
+ * Buckets public IPv4 addresses into /24 subnets to defeat automated IP-rotation evasion.
+ */
+function getLockoutKey(ip: string): string {
+  if (ip === "127.0.0.1" || ip === "::1" || ip.startsWith("10.0.") || ip.startsWith("10.99.")) {
+    return ip;
+  }
+  if (ip.includes(".")) {
+    const parts = ip.split(".");
+    if (parts.length === 4) {
+      return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+    }
+  }
+  return ip;
+}
+
 export function checkLoginLockout(ip: string): {
   isLocked: boolean;
   remainingLockoutSeconds: number;
@@ -149,7 +166,8 @@ export function checkLoginLockout(ip: string): {
   remainingAttempts: number;
 } {
   const now = Date.now();
-  const record = loginLockoutCache.get(ip);
+  const key = getLockoutKey(ip);
+  const record = loginLockoutCache.get(key) || loginLockoutCache.get(ip);
 
   if (!record) {
     return {
@@ -196,7 +214,8 @@ export function recordLoginFailure(ip: string): {
   remainingLockoutSeconds: number;
 } {
   const now = Date.now();
-  let record = loginLockoutCache.get(ip);
+  const key = getLockoutKey(ip);
+  let record = loginLockoutCache.get(key) || loginLockoutCache.get(ip);
 
   if (!record || now - record.lastFailureTime > LOCKOUT_WINDOW_MS) {
     record = {
@@ -211,11 +230,11 @@ export function recordLoginFailure(ip: string): {
 
   if (record.failures >= MAX_LOGIN_FAILURES) {
     record.lockedUntil = now + LOCKOUT_WINDOW_MS;
-    if (loginLockoutCache.size >= MAX_LOCKOUT_ENTRIES && !loginLockoutCache.has(ip)) {
-      const oldestIp = loginLockoutCache.keys().next().value;
-      if (oldestIp) loginLockoutCache.delete(oldestIp);
+    if (loginLockoutCache.size >= MAX_LOCKOUT_ENTRIES && !loginLockoutCache.has(key)) {
+      const oldestKey = loginLockoutCache.keys().next().value;
+      if (oldestKey) loginLockoutCache.delete(oldestKey);
     }
-    loginLockoutCache.set(ip, record);
+    loginLockoutCache.set(key, record);
     return {
       isLocked: true,
       remainingAttempts: 0,
@@ -223,11 +242,11 @@ export function recordLoginFailure(ip: string): {
     };
   }
 
-  if (loginLockoutCache.size >= MAX_LOCKOUT_ENTRIES && !loginLockoutCache.has(ip)) {
-    const oldestIp = loginLockoutCache.keys().next().value;
-    if (oldestIp) loginLockoutCache.delete(oldestIp);
+  if (loginLockoutCache.size >= MAX_LOCKOUT_ENTRIES && !loginLockoutCache.has(key)) {
+    const oldestKey = loginLockoutCache.keys().next().value;
+    if (oldestKey) loginLockoutCache.delete(oldestKey);
   }
-  loginLockoutCache.set(ip, record);
+  loginLockoutCache.set(key, record);
   return {
     isLocked: false,
     remainingAttempts: MAX_LOGIN_FAILURES - record.failures,
@@ -236,7 +255,9 @@ export function recordLoginFailure(ip: string): {
 }
 
 export function clearLoginFailures(ip: string): void {
+  const key = getLockoutKey(ip);
   loginLockoutCache.delete(ip);
+  loginLockoutCache.delete(key);
 }
 
 /**
