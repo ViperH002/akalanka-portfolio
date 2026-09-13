@@ -137,6 +137,12 @@ export default function AdminDashboardPage() {
     } finally {
       setIsAuthenticated(false);
       setPasscode("");
+      setMfaCode("");
+      setRequiresMfa(false);
+      setErrorMsg("");
+      if (typeof window !== "undefined") {
+        window.history.replaceState(null, "", "/admin");
+      }
     }
   };
 

@@ -36,7 +36,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate request payload with Zod
+    // 2. Validate Content-Type header
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      return NextResponse.json<ChatApiResponse>(
+        {
+          success: false,
+          message: "Unsupported Media Type. Expected application/json.",
+          conversationId: "error",
+          shouldSpeak: false,
+        },
+        { status: 415 }
+      );
+    }
+
+    // 3. Enforce maximum payload size boundary (64 KB)
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 65_536) {
+      return NextResponse.json<ChatApiResponse>(
+        {
+          success: false,
+          message: "Transmission payload exceeds allowable size boundary (64KB).",
+          conversationId: "error",
+          shouldSpeak: false,
+        },
+        { status: 413 }
+      );
+    }
+
+    // 4. Validate request payload with Zod
     let rawBody: unknown;
     try {
       rawBody = await req.json();

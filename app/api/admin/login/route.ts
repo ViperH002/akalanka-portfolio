@@ -21,7 +21,25 @@ export async function POST(req: Request) {
 
     const ip = getClientIp(req);
 
-    // 1. Parse and validate request body schema
+    // 1. Validate Content-Type header
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      return NextResponse.json(
+        { error: "Unsupported Media Type. Expected application/json." },
+        { status: 415, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // 2. Enforce maximum payload size boundary (16 KB)
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 16_384) {
+      return NextResponse.json(
+        { error: "Payload exceeds allowable authentication request size boundary (16KB)." },
+        { status: 413, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // 3. Parse and validate request body schema
     let rawBody: unknown;
     try {
       rawBody = await req.json();

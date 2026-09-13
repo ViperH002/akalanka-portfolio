@@ -411,7 +411,7 @@ async function runRegressionSuite() {
       headers: { "Content-Type": `multipart/form-data; boundary=${boundary}`, "X-Real-IP": "10.0.13.1" },
       body,
     });
-    assert(res.status === 400 || res.status === 422, `Multipart file upload rejected with HTTP ${res.status}`);
+    assert(res.status === 400 || res.status === 415 || res.status === 422, `Multipart file upload rejected with HTTP ${res.status}`);
   } catch (err) {
     assert(false, "File upload rejection test failed", err.message);
   }
@@ -700,6 +700,43 @@ async function runRegressionSuite() {
     assert(allIntercepted, "Control delimiters (<|im_start|>, [INST], markdown extraction) successfully blocked");
   } catch (err) {
     assert(false, "LLM delimiter test failed", err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // 26. Content-Type Validation (415 Unsupported Media Type)
+  // -------------------------------------------------------------------------
+  console.log("\n[26] Testing Content-Type Enforcement...");
+  try {
+    const invalidTypeRes = await fetch(`${BASE_URL}/api/contact`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", "X-Real-IP": "10.99.2.1" },
+      body: "raw unparsed plain text transmission",
+    });
+    assert(invalidTypeRes.status === 415, `Non-JSON Content-Type rejected with 415 (got ${invalidTypeRes.status})`);
+  } catch (err) {
+    assert(false, "Content-Type test failed", err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // 27. Request Payload Size Boundary (413 Payload Too Large)
+  // -------------------------------------------------------------------------
+  console.log("\n[27] Testing Request Payload Size Boundaries...");
+  try {
+    const hugeMessage = "A".repeat(70_000); // 70 KB payload exceeds 64KB boundary
+    const oversizedRes = await fetch(`${BASE_URL}/api/contact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Real-IP": "10.99.2.2" },
+      body: JSON.stringify({
+        name: "Oversized Tester",
+        email: "size@test.com",
+        projectType: "webapp",
+        budget: "starter",
+        message: hugeMessage,
+      }),
+    });
+    assert(oversizedRes.status === 413, `Oversized payload rejected with 413 Payload Too Large (got ${oversizedRes.status})`);
+  } catch (err) {
+    assert(false, "Payload size boundary test failed", err.message);
   }
 
   // -------------------------------------------------------------------------

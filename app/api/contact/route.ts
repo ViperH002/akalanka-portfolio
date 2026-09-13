@@ -63,7 +63,25 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Parse body safely
+    // 2. Validate Content-Type header
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      return NextResponse.json(
+        { error: "Unsupported Media Type. Expected application/json." },
+        { status: 415, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // 3. Enforce maximum payload size boundary (64 KB)
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 65_536) {
+      return NextResponse.json(
+        { error: "Payload exceeds maximum transmission size (64KB)." },
+        { status: 413, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+
+    // 4. Parse body safely
     let rawBody: unknown;
     try {
       rawBody = await req.json();

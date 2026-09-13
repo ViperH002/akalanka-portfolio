@@ -30,7 +30,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Validate request
+    // 2. Validate Content-Type header
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      return NextResponse.json(
+        { error: "Unsupported Media Type. Expected application/json." },
+        { status: 415 }
+      );
+    }
+
+    // 3. Enforce maximum payload size boundary (32 KB)
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 32_768) {
+      return NextResponse.json(
+        { error: "Payload exceeds allowable vocal synthesis size boundary (32KB)." },
+        { status: 413 }
+      );
+    }
+
+    // 4. Validate request
     let rawBody: unknown;
     try {
       rawBody = await req.json();
