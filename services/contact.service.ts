@@ -169,7 +169,7 @@ export class ContactService {
     if (process.env.RESEND_API_KEY) {
       try {
         const fromAddress = process.env.RESEND_FROM_EMAIL || "contact@akviper.xyz";
-        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "contact@akviper.xyz";
+        const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "chandiraakalanka@gmail.com";
         const emailHtml = buildContactEmailHtml(sanitized);
 
         const resendRes = await fetch("https://api.resend.com/emails", {
